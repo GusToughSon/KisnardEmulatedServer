@@ -118,6 +118,7 @@ The server emulates the following mechanics:
 * **Combat & Levelling**: Real-time battle updates, level-up calculations, and bestiary records.
 * **NPC Shops**: Custom buy/sell transaction processing. Broadcasts client-native purchase (`shopBuyWindowPurchase`) and sale (`shopSellWindowSale`) confirmation packets to display official success notifications and keep UI states synchronized.
 * **Character & Account-Wide Banking**: Manages individual character banks and account-wide shared banks (`accountBankWindow`) for transferring items across same-account characters. Double-clicking the Banker NPC in the world directly loads the banking interfaces.
+* **Mailbox System**: Full implementation of the in-game mail system. Players can send letters to other characters, view their inbox and sent tabs with proper timestamps, open mail details, and claim item attachments from packages. The server tracks mail status states (`ul` = unread letter, `ol` = opened letter, `up` = unopened package, `op` = opened package, `ep` = empty package) and notifies players of unread mail on login. Online recipients receive real-time `mailboxMessageInfo` notifications when new mail arrives.
 * **Signs & Books Interactions**: Detects when coordinates are double-clicked and opens the client reading interface.
 * **Equipment & Inventory**: Custom binary serialization of equipment slots and inventory bags.
 * **Costume Hiding**: Saves costume preferences to the database and hides/shows character costume sprites accordingly.

@@ -1818,7 +1818,34 @@ class ServerGUI:
                         
                     elif cmd_name == "mailboxMessageInfo":
                         char_name = cmd_meta
-                        response = f"{char_name}-mailboxMessageInfo@empty"
+                        # Check for unread mail and unclaimed packages on login
+                        account_name = username.lower() if username else "unknown_user"
+                        account_data = db.get("accounts", {}).get(account_name, {})
+                        characters = account_data.get("characters", [])
+                        active_char = None
+                        for c in characters:
+                            if c["name"].lower() == char_name.lower():
+                                active_char = c
+                                break
+                        if active_char:
+                            mailbox = active_char.get("mailbox", [])
+                            inbox = [m for m in mailbox if m.get("recipient", "").lower() == char_name.lower()]
+                            statuses = []
+                            for m in inbox:
+                                mtype = m.get("type", "ol")
+                                if mtype == "ul":
+                                    statuses.append("unread")
+                                elif mtype in ("up", "op"):
+                                    # Package with unclaimed gifts
+                                    gifts = m.get("gifts", [])
+                                    if any(g.get("claimed", "n") == "n" for g in gifts if g):
+                                        statuses.append("unclaimed")
+                            if statuses:
+                                response = f"{char_name}-mailboxMessageInfo@{'|'.join(statuses)}"
+                            else:
+                                response = f"{char_name}-mailboxMessageInfo@empty"
+                        else:
+                            response = f"{char_name}-mailboxMessageInfo@empty"
                         send_packet(response)
                         
                     elif cmd_name == "ping":
@@ -2172,8 +2199,12 @@ class ServerGUI:
                                 active_char = c
                                 break
                         if active_char:
+                            from datetime import datetime
                             mailbox = active_char.setdefault("mailbox", [])
                             inbox_mails = [m for m in mailbox if m.get("recipient", "").lower() == char_name.lower()]
+                            sent_mails = [m for m in mailbox if m.get("sender", "").lower() == char_name.lower()]
+                            
+                            # Build inbox fields: each mail = [id, type, sender, subject, timestamp]
                             inbox_parts = []
                             for m in inbox_mails:
                                 inbox_parts.extend([
@@ -2181,9 +2212,10 @@ class ServerGUI:
                                     m.get("type", "ul"),
                                     m.get("sender", "System"),
                                     m.get("subject", "No Subject"),
-                                    m.get("date", "2026-06-30 00:00:00")
+                                    m.get("date", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
                                 ])
-                            sent_mails = [m for m in mailbox if m.get("sender", "").lower() == char_name.lower()]
+                            
+                            # Build sent fields: each mail = [id, type, recipient, subject, timestamp]
                             sent_parts = []
                             for m in sent_mails:
                                 sent_parts.extend([
@@ -2191,16 +2223,31 @@ class ServerGUI:
                                     m.get("type", "ol"),
                                     m.get("recipient", ""),
                                     m.get("subject", "No Subject"),
-                                    m.get("date", "2026-06-30 00:00:00")
+                                    m.get("date", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
                                 ])
-                            inbox_payload = "|".join(inbox_parts) if inbox_parts else ""
-                            sent_payload = "|".join(sent_parts) if sent_parts else ""
-                            response = f"{char_name}-mailboxWindow@{len(inbox_mails)}|{inbox_payload}|{len(sent_mails)}|{sent_payload}"
+                            
+                            # Protocol: inbox_count | inbox_fields... | sent_count | sent_fields...
+                            # When count is 0 and there are no fields, we still need exactly count then the next count
+                            if inbox_parts:
+                                inbox_payload = "|".join(inbox_parts)
+                                response_parts = [str(len(inbox_mails)), inbox_payload]
+                            else:
+                                response_parts = ["0", ""]
+                            
+                            if sent_parts:
+                                sent_payload = "|".join(sent_parts)
+                                response_parts.extend([str(len(sent_mails)), sent_payload])
+                            else:
+                                response_parts.extend(["0"])
+                            
+                            response = f"{char_name}-mailboxWindow@{'|'.join(response_parts)}"
                             send_packet(response)
 
                     elif cmd_name == "mailDetails":
                         char_name = cmd_meta
-                        mail_id = int(cmd_args[1]) if len(cmd_args) > 1 else 0
+                        mail_id_str = cmd_args[1] if len(cmd_args) > 1 else "0"
+                        mail_box_type = cmd_args[2] if len(cmd_args) > 2 else "inbox"
+                        
                         account_name = username.lower() if username else "unknown_user"
                         account_data = db.get("accounts", {}).get(account_name, {})
                         characters = account_data.get("characters", [])
@@ -2213,14 +2260,20 @@ class ServerGUI:
                             mailbox = active_char.setdefault("mailbox", [])
                             mail = None
                             for m in mailbox:
-                                if m["id"] == mail_id:
+                                if str(m["id"]) == mail_id_str:
                                     mail = m
                                     break
                             if mail:
+                                # Mark as opened
                                 if mail.get("type") == "ul":
                                     mail["type"] = "ol"
                                     save_db(db)
-                                gift_slots = ["-1", "-1", "-1", "-1"]
+                                elif mail.get("type") == "up":
+                                    mail["type"] = "op"
+                                    save_db(db)
+                                
+                                from datetime import datetime
+                                # Build payload: id | sender | recipient | type | subject | body | [4 gift slots] | timestamp
                                 payload = [
                                     str(mail["id"]),
                                     mail.get("sender", "System"),
@@ -2229,55 +2282,191 @@ class ServerGUI:
                                     mail.get("subject", ""),
                                     mail.get("body", "")
                                 ]
-                                payload.extend(gift_slots)
-                                payload.append(mail.get("date", "2026-06-30 00:00:00"))
+                                
+                                # 4 gift attachment slots
+                                # Each gift: name | image_path | quantity | gem1 | gem2 | enchant_level | rarity | stars | claimed
+                                # If empty: -1
+                                gifts = mail.get("gifts", [])
+                                for slot_idx in range(4):
+                                    if slot_idx < len(gifts) and gifts[slot_idx]:
+                                        g = gifts[slot_idx]
+                                        item_id = g.get("item_id", "")
+                                        item_def = ITEMS.get(item_id, {}) if item_id else {}
+                                        item_name = g.get("name", item_def.get("name", "Unknown"))
+                                        item_type = item_def.get("type", "I")
+                                        
+                                        if item_type == "W":
+                                            img_path = f"weapon/weapon_{item_def.get('image', 'unknown.png')}"
+                                        elif item_type == "A":
+                                            img_path = f"armor/armor_{item_def.get('image', 'unknown.png')}"
+                                        else:
+                                            img_path = f"item/item_{item_def.get('image', 'unknown.png')}"
+                                        
+                                        payload.extend([
+                                            item_name,
+                                            img_path,
+                                            str(g.get("quantity", 1)),
+                                            g.get("gem1", "no"),
+                                            g.get("gem2", "no"),
+                                            str(g.get("enchant_level", 0)),
+                                            str(g.get("rarity", 0)),
+                                            str(g.get("stars", 1)),
+                                            g.get("claimed", "n")
+                                        ])
+                                    else:
+                                        payload.append("-1")
+                                
+                                payload.append(mail.get("date", datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
                                 send_packet(f"{char_name}-mailDetails@{'|'.join(payload)}")
 
                     elif cmd_name == "mailboxMessageInfo":
                         char_name = cmd_meta
-                        recipient = cmd_args[1] if len(cmd_args) > 1 else ""
-                        subject = cmd_args[2] if len(cmd_args) > 2 else ""
-                        body = cmd_args[3] if len(cmd_args) > 3 else ""
-                        recip_char = None
-                        for acc_name, acc in db.get("accounts", {}).items():
-                            for c in acc.get("characters", []):
-                                if c["name"].lower() == recipient.lower():
-                                    recip_char = c
+                        # This is the "send mail" action when cmd_args has parameters
+                        if len(cmd_args) > 1:
+                            recipient = cmd_args[1] if len(cmd_args) > 1 else ""
+                            subject = cmd_args[2] if len(cmd_args) > 2 else ""
+                            body = cmd_args[3] if len(cmd_args) > 3 else ""
+                            recip_char = None
+                            recip_account_data = None
+                            for acc_name, acc in db.get("accounts", {}).items():
+                                for c in acc.get("characters", []):
+                                    if c["name"].lower() == recipient.lower():
+                                        recip_char = c
+                                        recip_account_data = acc
+                                        break
+                                if recip_char:
                                     break
                             if recip_char:
-                                break
-                        if recip_char:
-                            import random
-                            mail_id = random.randint(100000, 999999)
-                            new_mail = {
-                                "id": mail_id,
-                                "sender": char_name,
-                                "recipient": recipient,
-                                "type": "ul",
-                                "subject": subject,
-                                "body": body,
-                                "date": "2026-06-30 00:00:00",
-                                "claimed": "n"
-                            }
-                            recip_char.setdefault("mailbox", []).append(new_mail)
+                                import random
+                                from datetime import datetime
+                                mail_id = random.randint(100000, 999999)
+                                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                new_mail = {
+                                    "id": mail_id,
+                                    "sender": char_name,
+                                    "recipient": recipient,
+                                    "type": "ul",
+                                    "subject": subject,
+                                    "body": body,
+                                    "date": timestamp,
+                                    "gifts": [],
+                                    "claimed": "n"
+                                }
+                                # Add to recipient's mailbox
+                                recip_char.setdefault("mailbox", []).append(new_mail)
+                                # Add copy to sender's mailbox for Sent tab
+                                account_name = username.lower() if username else "unknown_user"
+                                account_data = db.get("accounts", {}).get(account_name, {})
+                                for c in account_data.get("characters", []):
+                                    if c["name"].lower() == char_name.lower():
+                                        sent_copy = dict(new_mail)
+                                        sent_copy["type"] = "ol"  # Sent mail shows as opened letter
+                                        c.setdefault("mailbox", []).append(sent_copy)
+                                        break
+                                save_db(db)
+                                send_packet(f"{char_name}-serverMessages@Mail sent successfully to {recipient}.")
+                                # Notify recipient if online
+                                with self.connections_lock:
+                                    r_conn = self.active_connections.get(recipient.lower())
+                                    if r_conn:
+                                        r_conn["send"](f"{recipient}-mailboxMessageInfo@unread")
+                            else:
+                                send_packet(f"{char_name}-serverMessages@Player '{recipient}' does not exist.")
+                        else:
+                            # Login-time status check (duplicate handler for safety)
                             account_name = username.lower() if username else "unknown_user"
                             account_data = db.get("accounts", {}).get(account_name, {})
-                            for c in account_data.get("characters", []):
+                            characters = account_data.get("characters", [])
+                            active_char = None
+                            for c in characters:
                                 if c["name"].lower() == char_name.lower():
-                                    c.setdefault("mailbox", []).append(new_mail)
+                                    active_char = c
                                     break
-                            save_db(db)
-                            send_packet(f"{char_name}-serverMessages@Mail sent successfully to {recipient}.")
-                            with self.connections_lock:
-                                r_conn = self.active_connections.get(recipient.lower())
-                                if r_conn:
-                                    r_conn["send"](f"{recipient}-serverMessages@You have received new mail from {char_name}!")
-                        else:
-                            send_packet(f"{char_name}-serverMessages@Player '{recipient}' does not exist.")
+                            if active_char:
+                                mailbox = active_char.get("mailbox", [])
+                                inbox = [m for m in mailbox if m.get("recipient", "").lower() == char_name.lower()]
+                                statuses = []
+                                for m in inbox:
+                                    mtype = m.get("type", "ol")
+                                    if mtype == "ul":
+                                        statuses.append("unread")
+                                    elif mtype in ("up", "op"):
+                                        gifts = m.get("gifts", [])
+                                        if any(g.get("claimed", "n") == "n" for g in gifts if g):
+                                            statuses.append("unclaimed")
+                                if statuses:
+                                    response = f"{char_name}-mailboxMessageInfo@{'|'.join(statuses)}"
+                                else:
+                                    response = f"{char_name}-mailboxMessageInfo@empty"
+                            else:
+                                response = f"{char_name}-mailboxMessageInfo@empty"
+                            send_packet(response)
 
                     elif cmd_name == "mailClaimGift":
                         char_name = cmd_meta
-                        send_packet(f"{char_name}-serverMessages@No gifts in this mail.")
+                        mail_id_str = cmd_args[1] if len(cmd_args) > 1 else "0"
+                        gift_slot = int(cmd_args[2]) if len(cmd_args) > 2 else 0
+                        
+                        account_name = username.lower() if username else "unknown_user"
+                        account_data = db.get("accounts", {}).get(account_name, {})
+                        characters = account_data.get("characters", [])
+                        active_char = None
+                        for c in characters:
+                            if c["name"].lower() == char_name.lower():
+                                active_char = c
+                                break
+                        
+                        if active_char:
+                            mailbox = active_char.setdefault("mailbox", [])
+                            mail = None
+                            for m in mailbox:
+                                if str(m["id"]) == mail_id_str:
+                                    mail = m
+                                    break
+                            
+                            if mail:
+                                gifts = mail.get("gifts", [])
+                                if gift_slot < len(gifts) and gifts[gift_slot]:
+                                    gift = gifts[gift_slot]
+                                    if gift.get("claimed", "n") == "n":
+                                        # Try to add item to player inventory
+                                        inv = active_char.setdefault("inventory", [None] * 25)
+                                        added = False
+                                        for i in range(25):
+                                            if inv[i] is None:
+                                                import random
+                                                uid = random.randint(100000, 999999)
+                                                inv[i] = {
+                                                    "id": gift.get("item_id", ""),
+                                                    "unique_id": uid,
+                                                    "quantity": gift.get("quantity", 1)
+                                                }
+                                                added = True
+                                                break
+                                        
+                                        if added:
+                                            gift["claimed"] = "y"
+                                            # Check if all gifts are claimed, mark mail as empty package
+                                            all_claimed = all(g.get("claimed", "n") == "y" for g in gifts if g)
+                                            if all_claimed:
+                                                mail["type"] = "ep"
+                                            save_db(db)
+                                            
+                                            item_def = ITEMS.get(gift.get("item_id", ""), {})
+                                            item_name = gift.get("name", item_def.get("name", "Unknown"))
+                                            send_packet(f"{char_name}-mailClaimGift@true|{item_name}")
+                                            
+                                            # Update backpack
+                                            response_bp = f"{char_name}-backpackWindow@40-37-32|y|y|" + "|".join([serialize_item(it, it.get("unique_id") if it else 10000+i) for i, it in enumerate(inv)])
+                                            send_packet(response_bp)
+                                        else:
+                                            send_packet(f"{char_name}-serverMessages@Your backpack is full!")
+                                    else:
+                                        send_packet(f"{char_name}-serverMessages@This gift has already been claimed.")
+                                else:
+                                    send_packet(f"{char_name}-serverMessages@No gift in this slot.")
+                            else:
+                                send_packet(f"{char_name}-serverMessages@Mail not found.")
 
                     elif cmd_name == "marketplaceWindow":
                         char_name = cmd_meta
@@ -3372,7 +3561,7 @@ class ServerGUI:
 
                     elif cmd_name in ["bestiaryWindow", "collectionsWindow", "craftingWindow",
                                       "enchantingWindow", "enchantingMergeWindow",
-                                      "premiumShopBuyWindow", "mailboxWindow",
+                                      "premiumShopBuyWindow",
                                       "guildWindow", "guildLevelWindow",
                                       "marketplaceListWindow", "rivalsWindow",
                                       "petStableWindow"]:
