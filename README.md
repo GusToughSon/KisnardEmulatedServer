@@ -35,32 +35,93 @@ KisnardEmulatedServer/
 
 ---
 
-## ⚙️ Component Explanations
+## 🌐 Network Protocol & Communication
 
-### 🖥️ 1. Main Server Stack (`kisnard_server.py`)
-This script contains the core Python server logic and a **Tkinter-based Control Panel**. Key features include:
-* **SSL/TLS TCP Socket Server**: Listens on port `34215` and wraps client communication in SSL using `server.key` and `server.crt`.
-* **Multi-threaded Architecture**: Runs non-blocking background workers for:
-  * **Combat Ticks**: Auto-processes attacks, experience gains, player grunts/damage sounds, death states, and level-up visual effects.
-  * **Movement Processing**: Resolves pathfinding coordinates thread-safely via a dedicated movement queue.
-  * **Day/Night Cycle Loop**: Auto-advances time through dawn, day, dusk, and night, broadcasting screen-shading packets.
-* **Admin Dashboard tabs**:
-  * **Players**: View active users, ban/kick players, and view account stats.
-  * **Interactables**: Double-click listbox coordinates to instantly populate entry fields and edit signs/books Read IDs.
-  * **Verbose Console Logs & Chat Monitor**: Live capture of all network packet transmissions and global game chat logs.
-
-### 🔐 2. Security & Handshaking (`scratch/`)
-* **`patch_checksums.py`**: The original Java client requires a secure SSL connection. The client verifies the checksum of its Java truststore against `checksums.txt`. This script computes the SHA-1 of the emulated server's custom truststore certificates and patches the client's local files to prevent SSL handshake errors.
-* **SSL Certificates**: The `server.key` and `server.crt` are dynamically generated PEM certificates used by the server's socket wrapper.
-
-### 📦 3. Serialization Layer (`java_serialization/`)
-Because the Java client sends binary representations of Java objects (like arrays, classes, and serialization streams) when sending stats and inventories, the Python server uses `java_serialization.py` to parse these streams into Python dictionaries and vice-versa. This is essential for the equipment window, inventories, and bag slot operations.
-
-### 🚀 4. Batch Utility Tools
-* **`run_local_server.bat`**: Automates checksum patching and boots the Python server.
-* **`compile_to_exe.bat`**: Runs PyInstaller to bundle the code and the `java_serialization` folder into a single-file, console-free Windows executable (`dist/kisnard_server.exe`).
+The server communicates with the Java client over a secure TLS/SSL wrapped TCP connection.
+* **Encryption**: Sockets are wrapped in TLS using custom generated PEM certificates (`server.key` and `server.crt`).
+* **Packet Structure**: Custom string-based payloads delimited by `@` and `|`:
+  * **Incoming (Client to Server)**: `{character_name}-{action}@{arg1}|{arg2}`
+  * **Outgoing (Server to Client)**: `{character_name}-{action}@{response_data}`
+* **Data Serialization**: Inventory items, banks, character statistics, and active equipment are processed using a custom Python implementation of Java Object Serialization stream headers to exchange binary data structures natively.
 
 ---
 
-## 📖 Connection & Quick Start Guide
-To connect your client, refer to the step-by-step instructions in the [How to connect Guide](file:///c:/Users/gooro/OneDrive/Desktop/KisnardFinds/KisnardEmulatedServer/How%20to%20connect/README.md).
+## 🧵 Threading Architecture
+
+To keep the GUI responsive and prevent network bottlenecks, the server uses a multi-threaded execution model:
+
+```mermaid
+graph TD
+    A[Main GUI Thread] --> B[TCP Server Listener Thread]
+    A --> C[Combat Worker Thread]
+    A --> D[Movement Queue Thread]
+    A --> E[Time-of-Day Worker Thread]
+    B --> F[Client Connection Threads]
+    F -->|Enqueues Commands| A
+```
+
+### 1. Main / GUI Thread (Tkinter Event Loop)
+* Runs the Tkinter user interface.
+* Periodically polls queues (`self.poll_queues`) every 100ms to process incoming client commands and update GUI elements thread-safely.
+* Triggers a debounced database save (`tick_db_save`) every 5 seconds if a dirty flag is set.
+
+### 2. TCP Server Listener Thread (`start_tcp_server`)
+* Runs in a daemon thread.
+* Binds the secure socket to `0.0.0.0:34215`, listens, and blocks on `.accept()`.
+* Spawns a dedicated thread for each client socket that connects.
+
+### 3. Client Connection Threads (`handle_client`)
+* Spawned dynamically for each active connection.
+* Blocks on socket reads (`recv`), decodes incoming packet strings, handles low-level keep-alives (pings), and pushes command payloads into the main thread's queue to prevent socket blocking.
+
+### 4. Combat Worker Thread (`combat_worker`)
+* Runs in a daemon thread, ticking every 2.0 seconds.
+* Iterates through characters currently marked in combat (`self.active_combat`).
+* Calculates player vs monster damage formulas, triggers experience rewards, registers bestiary kills, processes level-ups, broadcasts floating hit numbers (`dealtHit`/`receivedHit`), grunts, swings, and death audio effects (`onScreenNoise`).
+
+### 5. Movement Worker Thread (`movement_worker`)
+* Runs in a daemon thread.
+* Processes coordinate updates (`self.movement_queue`) sequentially.
+* Ensures character steps are synchronized smoothly, respects movement cooldowns, and updates player coordinates in the shared memory space.
+
+### 6. Time of Day Worker Thread (`tod_worker`)
+* Ticks every 45 seconds to automatically advance the server's time of day index (`0` to `7`).
+* Thread-safely updates the GUI Combobox selection and broadcasts the time update packets (`updateTimeOfDay`) to all active clients.
+
+---
+
+## 🕹️ Game Mechanics & Emulation Scope
+
+The server emulates the following mechanics:
+* **Account Registry**: Auto-registers new accounts and hashes passwords.
+* **Character Customization**: Creation, deletion, and selective loading of player characters (genders, races).
+* **Movement & Collision**: Validates movement steps against map collision layers.
+* **Combat & Levelling**: Real-time battle updates, level-up calculations, and bestiary records.
+* **Signs & Books Interactions**: Detects when coordinates are double-clicked and opens the client reading interface.
+* **Equipment & Inventory**: Custom binary serialization of equipment slots and inventory bags.
+* **Costume Hiding**: Saves costume preferences to the database and hides/shows character costume sprites accordingly.
+
+---
+
+## 🛠️ Admin GUI Dashboard Capabilities
+
+The server control panel provides administrators with full monitoring and control capabilities:
+
+### 🎛️ Top Control Panel
+* **Verbose Log Toggle**: Toggles full network packet tracing in the console.
+* **Time of Day Combobox**: Manually change the server time (`Dawn`, `Day 1-4`, `Dusk`, `Night 1-2`) to immediately broadcast lighting updates.
+
+### 🗂️ Left Notebook Panel
+* **Players Tab**:
+  * Displays a listbox of all online players.
+  * Clicking a player opens a detailed inspection window showing their **Stats** (HP, Mana, Level, Coordinates, Gold), **Inventory** items, and **Equipped** gear.
+  * Administrative commands: **Kick Player** (closes socket) and **Ban Account** (updates database record).
+* **Guilds Tab**: Lists all registered guilds and permits renaming/editing.
+* **Interactables Tab**:
+  * Shows all coordinate-to-ReadID mappings for signs, gravestones, and books.
+  * **Double-click to Edit**: Double-clicking any coordinate mapping in the listbox automatically populates the input fields and focuses the cursor, allowing quick adjustments.
+  * **Add/Update & Remove**: Add new coordinate read triggers or delete existing ones.
+
+### 📜 Right Console Notebook
+* **Console Logs**: Renders socket status, packet data, database actions, and connection milestones.
+* **Chat Logs**: Real-time capture of player chat.
