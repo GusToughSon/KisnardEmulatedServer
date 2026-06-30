@@ -1,0 +1,89 @@
+@echo off
+:: Check for administrative privileges (needed to edit the hosts file)
+net session >nul 2>&1
+if %errorLevel% == 0 (
+    goto :admin
+) else (
+    echo Requesting Administrator privileges to configure hosts file...
+    powershell -Command "Start-Process -FilePath '%0' -Verb RunAs"
+    exit /b
+)
+
+:admin
+:: Change working directory to the folder where this batch file is located
+cd /d "%~dp0"
+
+set CLASSPATH=bin
+set CLASSPATH=%CLASSPATH%;lib/*
+set HOSTS_FILE=%SystemRoot%\System32\drivers\etc\hosts
+set EMULATED_DOMAIN=www.ThePlayerCity.com
+
+:: Load previous choice, default to 2 (Emulated) if not set
+set DEFAULT_CHOICE=2
+if exist last_choice.txt (
+    set /p DEFAULT_CHOICE=<last_choice.txt
+)
+
+:: Validate default choice is either 1 or 2
+if not "%DEFAULT_CHOICE%"=="1" (
+    if not "%DEFAULT_CHOICE%"=="2" (
+        set DEFAULT_CHOICE=2
+    )
+)
+
+cls
+echo ===================================================
+echo             Kisnard Online Launcher
+echo ===================================================
+echo.
+echo Please choose which server you want to connect to:
+echo.
+echo [1] Play on Official Live Server
+echo [2] Play on My Emulated Server (www.ThePlayerCity.com)
+echo.
+echo Waiting 5 seconds... (Defaulting to previous choice: [%DEFAULT_CHOICE%])
+echo.
+
+choice /c 12 /t 5 /d %DEFAULT_CHOICE% /m "Select option"
+set CHOICE=%errorlevel%
+
+:: Save current choice as the new default for next time
+echo %CHOICE%> last_choice.txt
+
+if "%CHOICE%"=="1" goto :play_live
+if "%CHOICE%"=="2" goto :play_emulated
+goto :eof
+
+:play_live
+echo Restoring hosts file for Live Server...
+:: Remove any localhost redirection lines from hosts
+powershell -Command "(GC '%HOSTS_FILE%') | ? { $_ -notmatch 'localhost' } | Out-File '%HOSTS_FILE%' -Encoding ASCII"
+echo Starting Kisnard Online (Official Live)...
+java -Djava.net.preferIPv4Stack=true -Xmx1024m com.jayavon.game.client.KisnardOnline -PROD
+echo.
+echo Game exited.
+pause
+goto :eof
+
+:play_emulated
+echo Resolving %EMULATED_DOMAIN%...
+:: Use PowerShell to resolve IP to avoid ping parsing issues
+for /f "usebackq tokens=*" %%a in (`powershell -Command "[System.Net.Dns]::GetHostAddresses('%EMULATED_DOMAIN%') | Select-Object -ExpandProperty IPAddressToString -First 1"`) do set EMULATED_IP=%%a
+
+if "%EMULATED_IP%"=="" (
+    echo [!] Warning: Could not resolve %EMULATED_DOMAIN% to an IP. Using fallback 127.0.0.1.
+    set EMULATED_IP=127.0.0.1
+)
+
+echo Configuring hosts file (IP: %EMULATED_IP%)...
+:: Remove any existing localhost redirections first
+powershell -Command "(GC '%HOSTS_FILE%') | ? { $_ -notmatch 'localhost' } | Out-File '%HOSTS_FILE%' -Encoding ASCII"
+:: Add the new redirection
+echo %EMULATED_IP% localhost>> "%HOSTS_FILE%"
+
+echo Starting Kisnard Online (Emulated)...
+java -Djava.net.preferIPv4Stack=true -Xmx1024m com.jayavon.game.client.KisnardOnline 2>&1 | findstr /V /I "ping"
+echo.
+echo Game exited.
+pause
+goto :eof
