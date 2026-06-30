@@ -4,6 +4,22 @@ A self-contained, multi-threaded Python TCP server designed to emulate the backe
 
 ---
 
+## 🔗 Client Integration (How it Works)
+
+To make the original Java client communicate with this local emulated server, two key redirection mechanisms are used:
+
+### 1. DNS/Hosts Redirection
+The Java client connects to the official server domain (`www.ThePlayerCity.com`). 
+* The **KisnardOnline_Launcher.bat** edits the Windows Hosts file (`%SystemRoot%\System32\drivers\etc\hosts`) to redirect `www.ThePlayerCity.com` traffic to your local emulated server's IP address (`127.0.0.1`).
+* This forces all client socket requests to connect directly to the emulated TCP listener.
+
+### 2. SSL/TLS Truststore Checksum Patching
+The original client enforces secure SSL connections and cross-checks its truststore against an online hash list to ensure certificates haven't been tampered with.
+* **`patch_checksums.py`** calculates the SHA-1 hash of our emulated server's custom truststore certificates.
+* It injects this hash into the client's `checksums.txt` file, bypassing Java's strict certificate verification and allowing the client to accept our emulated SSL handshake without throwing connection errors.
+
+---
+
 ## 📂 Directory Structure
 
 ```text
