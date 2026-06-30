@@ -122,7 +122,9 @@ The server emulates the following mechanics:
 * **Signs & Books Interactions**: Detects when coordinates are double-clicked and opens the client reading interface.
 * **Equipment & Inventory**: Custom binary serialization of equipment slots and inventory bags.
 * **Costume Hiding**: Saves costume preferences to the database and hides/shows character costume sprites accordingly.
-
+* **Chat System**: Supports general, global, whisper, and guild chat functionalities.
+* **Social Features**: Friends list management (`addFriend`, `removeFriend`, `friendsWindow`), and Guild creation/management (`guildWindow`, `guildCreate`).
+* **Item Management**: Using backpack items (`useBackpackItem`) and moving/picking up items from the ground (`groundMoveOrPickupItem`).
 ---
 
 ## 🛠️ Admin GUI Dashboard Capabilities
