@@ -2,3 +2,25 @@
 [*] Loaded sprites - NPCs: 121, Mobs: 173, Objects: 179, Tradeskills: 85
 [*] Map entities loaded - NPCs: 457, Mobs: 1957, Objects: 2134, Tradeskills: 1244, Collision tiles: 974345
 [*] Server listening on 0.0.0.0:34215 (SSL)...
+[*] New connection from 127.0.0.1:57205
+[*] SSL Handshake and Stream headers initialized with 127.0.0.1:57205
+[Client -> Server]: Received packet: test@authenticate|test|1.3.4 (Type: <class 'str'>)
+[*] Authenticating user: test
+[*] User 'test' authenticated successfully
+[Server -> Client]: Sending packet: test-authenticate@true|test
+[Server -> Client]: Sending packet: test-authenticate@true|test
+[Server -> Client]: Sent 30 bytes. Total sent: 46 bytes.
+[-] Connection Error with 127.0.0.1:57205: The read operation timed out
+Traceback (most recent call last):
+  File "C:\Users\gooro\OneDrive\Desktop\KisnardFinds\KisnardEmulatedServer\kisnard_server.py", line 1460, in handle_client
+    packet = obj_in.read_object()
+             ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\gooro\OneDrive\Desktop\KisnardFinds\KisnardEmulatedServer\java_serialization\java_serialization.py", line 37, in read_object
+    tc = self.stream.read(1)
+         ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\gooro\AppData\Local\Programs\Python\Python311\Lib\ssl.py", line 1168, in read
+    return self._sslobj.read(len)
+           ^^^^^^^^^^^^^^^^^^^^^^
+TimeoutError: The read operation timed out
+
+[*] Connection with 127.0.0.1 closed.
