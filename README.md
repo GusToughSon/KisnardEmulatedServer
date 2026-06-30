@@ -2,6 +2,9 @@
 
 A self-contained, multi-threaded Python TCP server designed to emulate the backend of the Java-based MMORPG **Kisnard Online**. It includes a graphical administration dashboard, player database persistence, custom event loops, and an integrated Java Binary Object Serialization deserializer.
 
+> [!IMPORTANT]
+> **Disclaimer**: This emulated server is a fan-made project created for entertainment purposes only.
+
 ---
 
 ## 🔗 Client Integration (How it Works)
@@ -9,9 +12,9 @@ A self-contained, multi-threaded Python TCP server designed to emulate the backe
 To make the original Java client communicate with this local emulated server, two key redirection mechanisms are used:
 
 ### 1. DNS/Hosts Redirection
-The Java client connects to the official server domain (`www.ThePlayerCity.com`). 
-* The **KisnardOnline_Launcher.bat** edits the Windows Hosts file (`%SystemRoot%\System32\drivers\etc\hosts`) to redirect `www.ThePlayerCity.com` traffic to your local emulated server's IP address (`127.0.0.1`).
-* This forces all client socket requests to connect directly to the emulated TCP listener.
+The Java client is configured to connect to `localhost` for development. 
+* To play on the unofficial emulated server (`www.ThePlayerCity.com`), the **KisnardOnline_Launcher.bat** resolves that domain and maps `localhost` to its IP inside the Windows Hosts file (`%SystemRoot%\System32\drivers\etc\hosts`).
+* When running this emulated server locally, we keep the connection routed to `127.0.0.1` (localhost) so the client connects directly to our local Python TCP listener.
 
 ### 2. SSL/TLS Truststore Checksum Patching
 The original client enforces secure SSL connections and cross-checks its truststore against an online hash list to ensure certificates haven't been tampered with.
