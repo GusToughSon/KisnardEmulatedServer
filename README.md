@@ -116,6 +116,8 @@ The server emulates the following mechanics:
 * **Character Customization**: Creation, deletion, and selective loading of player characters (genders, races).
 * **Movement & Collision**: Validates movement steps against map collision layers.
 * **Combat & Levelling**: Real-time battle updates, level-up calculations, and bestiary records.
+* **NPC Shops**: Custom buy/sell transaction processing. Broadcasts client-native purchase (`shopBuyWindowPurchase`) and sale (`shopSellWindowSale`) confirmation packets to display official success notifications and keep UI states synchronized.
+* **Character & Account-Wide Banking**: Manages individual character banks and account-wide shared banks (`accountBankWindow`) for transferring items across same-account characters. Double-clicking the Banker NPC in the world directly loads the banking interfaces.
 * **Signs & Books Interactions**: Detects when coordinates are double-clicked and opens the client reading interface.
 * **Equipment & Inventory**: Custom binary serialization of equipment slots and inventory bags.
 * **Costume Hiding**: Saves costume preferences to the database and hides/shows character costume sprites accordingly.

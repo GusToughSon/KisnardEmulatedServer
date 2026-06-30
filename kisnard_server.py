@@ -2555,6 +2555,37 @@ class ServerGUI:
                                     sprite = sprite[4:]
                                 npc_name = sprite.replace(".gif", "").replace(".png", "").replace("_", " ").title()
                                 
+                                if "banker" in sprite.lower():
+                                    account_name = username.lower() if username else "unknown_user"
+                                    account_data = db.get("accounts", {}).get(account_name, {})
+                                    characters = account_data.get("characters", [])
+                                    active_char = None
+                                    for c in characters:
+                                        if c["name"].lower() == char_name.lower():
+                                            active_char = c
+                                            break
+                                    if active_char:
+                                        # Character Bank
+                                        bank = active_char.setdefault("bank", [None] * 256)
+                                        serialized_bank = []
+                                        for idx, item in enumerate(bank):
+                                            uid = item.get("unique_id", 30000 + idx) if item else 0
+                                            serialized_bank.append(serialize_item(item, uid))
+                                        response_bk = f"{char_name}-bankWindow@40-37-32|y|y|y|" + "|".join(serialized_bank)
+                                        send_packet(response_bk)
+                                        
+                                        # Account Bank
+                                        account_bank = account_data.setdefault("account_bank", [None] * 256)
+                                        serialized_ab = []
+                                        for idx, item in enumerate(account_bank):
+                                            uid = item.get("unique_id", 40000 + idx) if item else 0
+                                            serialized_ab.append(serialize_item(item, uid))
+                                        response_ab = f"{char_name}-accountBankWindow@40-37-32|y|y|y|" + "|".join(serialized_ab)
+                                        send_packet(response_ab)
+                                    
+                                    npc_found = True
+                                    break
+                                
                                 # Fetch dynamic NPC dialogues from database
                                 npc_key = npc_name.split()[0] # e.g. "Alchemist"
                                 opts = self.dialogues.get(npc_key, [
@@ -3084,16 +3115,18 @@ class ServerGUI:
                                     if added:
                                         active_char["gold"] = current_gold - total_cost
                                         save_db(db)
-                                        send_packet(f"{char_name}-serverMessages@Purchased {quantity}x {item_def['name']} for {total_cost} gold.")
+                                        
+                                        # Send official client confirmation packet
+                                        send_packet(f"{char_name}-shopBuyWindowPurchase@true|[QUANTITY]={quantity}-[WAI_NAME]={item_def['name']}")
                                         
                                         response = f"{char_name}-backpackWindow@40-37-32|y|y|" + "|".join([serialize_item(it, it.get("unique_id") if it else 10000+i) for i, it in enumerate(inv)])
                                         send_packet(response)
                                         
                                         send_character_window(char_name, active_char)
                                     else:
-                                        send_packet(f"{char_name}-serverMessages@Your backpack is full!")
+                                        send_packet(f"{char_name}-shopBuyWindowPurchase@false|backpack_space")
                                 else:
-                                    send_packet(f"{char_name}-serverMessages@You do not have enough gold!")
+                                    send_packet(f"{char_name}-shopBuyWindowPurchase@false|not_enough_gold")
 
                     elif cmd_name == "shopSellWindow":
                         char_name = cmd_meta
@@ -3152,7 +3185,9 @@ class ServerGUI:
                                         
                                     active_char["gold"] = active_char.get("gold", 0) + sell_value
                                     save_db(db)
-                                    send_packet(f"{char_name}-serverMessages@Sold {sell_qty}x {item_def['name']} for {sell_value} gold.")
+                                    
+                                    # Send official client confirmation packet
+                                    send_packet(f"{char_name}-shopSellWindowSale@true|[QUANTITY]={sell_qty}-[WAI_NAME]={item_def['name']}")
                                     
                                     response = f"{char_name}-backpackWindow@40-37-32|y|y|" + "|".join([serialize_item(it, it.get("unique_id") if it else 10000+i) for i, it in enumerate(inv)])
                                     send_packet(response)
@@ -3192,6 +3227,21 @@ class ServerGUI:
                             response = f"{char_name}-bankWindow@40-37-32|y|y|y|{payload}"
                             send_packet(response)
 
+                    elif cmd_name == "accountBankWindow":
+                        char_name = cmd_meta
+                        account_name = username.lower() if username else "unknown_user"
+                        account_data = db.setdefault("accounts", {}).setdefault(account_name, {})
+                        
+                        account_bank = account_data.setdefault("account_bank", [None] * 256)
+                        serialized_bank = []
+                        for idx, item in enumerate(account_bank):
+                            uid = item.get("unique_id", 40000 + idx) if item else 0
+                            serialized_bank.append(serialize_item(item, uid))
+                        
+                        payload = "|".join(serialized_bank)
+                        response = f"{char_name}-accountBankWindow@40-37-32|y|y|y|{payload}"
+                        send_packet(response)
+
                     elif cmd_name == "bankMoveOrDropItem":
                         char_name = cmd_meta
                         dest_area = cmd_args[2] if len(cmd_args) > 2 else ""
@@ -3210,6 +3260,7 @@ class ServerGUI:
                         if active_char:
                             inv = active_char.setdefault("inventory", [None] * 25)
                             bank = active_char.setdefault("bank", [None] * 256)
+                            account_bank = account_data.setdefault("account_bank", [None] * 256)
                             
                             src_area = None
                             src_idx = -1
@@ -3230,11 +3281,21 @@ class ServerGUI:
                                         item_data = it
                                         break
                                         
+                            if not src_area:
+                                for idx, it in enumerate(account_bank):
+                                    if it and it.get("unique_id") == item_uid:
+                                        src_area = "accountBank"
+                                        src_idx = idx
+                                        item_data = it
+                                        break
+                                        
                             if item_data:
                                 if src_area == "backpack":
                                     inv[src_idx] = None
                                 elif src_area == "bank":
                                     bank[src_idx] = None
+                                elif src_area == "accountBank":
+                                    account_bank[src_idx] = None
                                     
                                 if dest_area == "backpack":
                                     d_idx = int(dest_slot)
@@ -3249,6 +3310,10 @@ class ServerGUI:
                                     d_idx = int(dest_slot)
                                     if 0 <= d_idx < 256:
                                         bank[d_idx] = item_data
+                                elif dest_area == "accountBank":
+                                    d_idx = int(dest_slot)
+                                    if 0 <= d_idx < 256:
+                                        account_bank[d_idx] = item_data
                                         
                                 save_db(db)
                                 
@@ -3257,6 +3322,9 @@ class ServerGUI:
                                 
                                 response_bk = f"{char_name}-bankWindow@40-37-32|y|y|y|" + "|".join([serialize_item(it, it.get("unique_id") if it else 30000+i) for i, it in enumerate(bank)])
                                 send_packet(response_bk)
+                                
+                                response_ab = f"{char_name}-accountBankWindow@40-37-32|y|y|y|" + "|".join([serialize_item(it, it.get("unique_id") if it else 40000+i) for i, it in enumerate(account_bank)])
+                                send_packet(response_ab)
                                 
                                 send_packet(f"{char_name}-bankMoveOrDropItem@true|success")
 
@@ -3307,7 +3375,7 @@ class ServerGUI:
                                       "premiumShopBuyWindow", "mailboxWindow",
                                       "guildWindow", "guildLevelWindow",
                                       "marketplaceListWindow", "rivalsWindow",
-                                      "petStableWindow", "bankWindow", "accountBankWindow"]:
+                                      "petStableWindow"]:
                         char_name = cmd_meta
                         self.log(f"[*] Player '{char_name}' requested {cmd_name} (stub)")
                         send_packet(f"{char_name}-{cmd_name}@0")
