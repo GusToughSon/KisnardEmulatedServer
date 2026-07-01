@@ -2,6 +2,7 @@ import pygame
 import sys
 import os
 import json
+import re
 from PIL import Image
 from map_renderer import MapRenderer
 from network_manager import NetworkManager
@@ -16,6 +17,9 @@ MAP_VIEW_WIDTH = 800
 MAP_VIEW_HEIGHT = 600
 PANEL_WIDTH = 224
 FPS = 60
+MAX_CHARACTER_SLOTS = 4
+CHARACTER_RACES = ("human", "orc", "brimlock", "tundrian")
+CHARACTER_GENDERS = ("male", "female")
 
 # Colors
 COLOR_BLACK = (0, 0, 0)
@@ -49,6 +53,7 @@ class KisnardClient:
         
         # Network Manager
         self.network = NetworkManager("127.0.0.1", 34215)
+        self.session_token = ""
         
         # Load Map Renderer
         self.map_renderer = MapRenderer()
@@ -71,12 +76,8 @@ class KisnardClient:
         self.exp = 150
         self.max_exp = 1000
         
-        # Character slots (Up to 3 slots)
-        self.slots = [
-            None,
-            None,
-            None
-        ]
+        # Character slots (Java client uses four slots)
+        self.slots = [None] * MAX_CHARACTER_SLOTS
         self.selected_slot = 0
         
         # UI Inputs
@@ -88,12 +89,18 @@ class KisnardClient:
                 with open(self.config_path, "r") as f:
                     cfg = json.load(f)
                     self.input_username = cfg.get("username", "")
-                    self.input_password = cfg.get("password", "")
             except:
                 pass
         
         self.input_char_name = ""
         self.active_input = "username"
+        self.char_race = "human"
+        self.char_gender = "male"
+        self.char_strength = 10
+        self.char_constitution = 10
+        self.char_dexterity = 10
+        self.char_intelligence = 20
+        self.char_message = ""
         
         # Avatar animation
         self.avatar_frames = []
@@ -127,6 +134,71 @@ class KisnardClient:
         self.last_heartbeat = 0
         
         self.running = True
+
+    def save_login_config(self):
+        try:
+            with open(self.config_path, "w") as f:
+                json.dump(
+                    {
+                        "username": self.input_username,
+                        "save_account": True,
+                    },
+                    f,
+                    indent=2,
+                )
+        except Exception:
+            pass
+
+    def attempt_login(self):
+        if not (self.input_username and self.input_password):
+            self.char_message = "Username and password required."
+            return
+        self.save_login_config()
+        try:
+            self.network.connect(self.input_username, self.input_password)
+        except Exception as e:
+            self.char_message = str(e)
+
+    def character_points_remaining(self):
+        return 50 - (self.char_strength + self.char_constitution + self.char_dexterity + self.char_intelligence)
+
+    def update_character_stats(self, field, delta):
+        current = getattr(self, field)
+        candidate = max(10, min(20, current + delta))
+        projected = self.character_points_remaining() - (candidate - current)
+        if projected < 0:
+            return
+        setattr(self, field, candidate)
+
+    def validate_character_creation(self):
+        name = self.input_char_name.strip()
+        if not name:
+            return False, "character_creation_validation_noName"
+        if len(name) > 19:
+            return False, "character_creation_validation_longName"
+        if len(name) < 4:
+            return False, "character_creation_validation_shortName"
+        if name[0] == " " or name[-1] == " ":
+            return False, "character_creation_validation_spaceStartEndName"
+        if "  " in name:
+            return False, "character_creation_validation_spacesName"
+        if name.lower() == self.input_username.strip().lower():
+            return False, "character_creation_validation_noaccountname"
+        if self.char_race not in CHARACTER_RACES or self.char_gender not in CHARACTER_GENDERS:
+            return False, "character_creation_validation_noRaceGender"
+        if self.character_points_remaining() != 0:
+            return False, "character_creation_validation_unusedStats"
+        if min(self.char_strength, self.char_constitution, self.char_dexterity, self.char_intelligence) < 10:
+            return False, "character_creation_validation_lowStats"
+        return True, ""
+
+    def build_create_character_packet(self):
+        gender_code = "M" if self.char_gender == "male" else "F"
+        return (
+            f"{self.input_username}@createCharacter|{self.session_token}|"
+            f"override-{self.input_char_name.strip()}|{self.char_race}|{gender_code}|"
+            f"{self.char_strength}|{self.char_constitution}|{self.char_dexterity}|{self.char_intelligence}"
+        )
 
     def load_gui_textures(self):
         header_path = os.path.join(self.assets_dir, "gui", "gui_header.png")
@@ -213,16 +285,7 @@ class KisnardClient:
             if event.key == pygame.K_TAB:
                 self.active_input = "password" if self.active_input == "username" else "username"
             elif event.key == pygame.K_RETURN:
-                if self.input_username and self.input_password:
-                    try:
-                        with open(self.config_path, "w") as f:
-                            json.dump({"username": self.input_username, "password": self.input_password}, f)
-                    except:
-                        pass
-                    try:
-                        self.network.connect(self.input_username, self.input_password)
-                    except Exception as e:
-                        print(f"Connection failed: {e}")
+                self.attempt_login()
             elif event.key == pygame.K_BACKSPACE:
                 if self.active_input == "username":
                     self.input_username = self.input_username[:-1]
@@ -240,6 +303,10 @@ class KisnardClient:
                 self.input_char_name = self.input_char_name[:-1]
             elif event.key == pygame.K_RETURN:
                 self.create_character()
+            elif event.key in (pygame.K_MINUS, pygame.K_KP_MINUS):
+                self.update_character_stats("char_intelligence", -1)
+            elif event.key in (pygame.K_EQUALS, pygame.K_PLUS, pygame.K_KP_PLUS):
+                self.update_character_stats("char_intelligence", 1)
             else:
                 if event.unicode.isprintable() and len(self.input_char_name) < 15:
                     self.input_char_name += event.unicode
@@ -272,19 +339,10 @@ class KisnardClient:
             elif 362 <= mx <= 662 and 380 <= my <= 410:
                 self.active_input = "password"
             elif 432 <= mx <= 592 and 440 <= my <= 480:
-                if self.input_username and self.input_password:
-                    try:
-                        with open(self.config_path, "w") as f:
-                            json.dump({"username": self.input_username, "password": self.input_password}, f)
-                    except:
-                        pass
-                    try:
-                        self.network.connect(self.input_username, self.input_password)
-                    except Exception as e:
-                        print(f"Connection failed: {e}")
+                self.attempt_login()
                 
         elif self.state == STATE_CHAR_SELECT:
-            for i in range(3):
+            for i in range(MAX_CHARACTER_SLOTS):
                 y_pos = 220 + i * 100
                 if 262 <= mx <= 762 and y_pos <= my <= y_pos + 80:
                     self.select_slot(i)
@@ -294,16 +352,18 @@ class KisnardClient:
         elif self.state == STATE_CHAR_CREATE:
             if 362 <= mx <= 662 and 220 <= my <= 250:
                 self.active_input = "char_name"
-            elif 312 <= mx <= 432 and 300 <= my <= 330:
-                self.player_race = "human"
-            elif 452 <= mx <= 572 and 300 <= my <= 330:
-                self.player_race = "dwarf"
-            elif 592 <= mx <= 712 and 300 <= my <= 330:
-                self.player_race = "orc"
+            elif 292 <= mx <= 382 and 300 <= my <= 330:
+                self.char_race = "human"
+            elif 402 <= mx <= 492 and 300 <= my <= 330:
+                self.char_race = "orc"
+            elif 512 <= mx <= 602 and 300 <= my <= 330:
+                self.char_race = "brimlock"
+            elif 622 <= mx <= 712 and 300 <= my <= 330:
+                self.char_race = "tundrian"
             elif 412 <= mx <= 492 and 380 <= my <= 410:
-                self.player_gender = "male"
+                self.char_gender = "male"
             elif 532 <= mx <= 612 and 380 <= my <= 410:
-                self.player_gender = "female"
+                self.char_gender = "female"
             elif 432 <= mx <= 592 and 470 <= my <= 510:
                 self.create_character()
             elif 100 <= mx <= 200 and 600 <= my <= 640:
@@ -318,21 +378,23 @@ class KisnardClient:
             self.player_gender = char["gender"]
             self.level = char["level"]
             self.load_avatar(self.player_race, self.player_gender)
-            self.network.send_packet(f"{self.input_username}@playCharacter|{self.player_name}")
+            self.network.send_packet(f"{self.input_username}@playCharacter|{self.session_token}|{self.player_name}")
         else:
             self.input_char_name = ""
-            self.player_race = "human"
-            self.player_gender = "male"
+            self.char_race = "human"
+            self.char_gender = "male"
+            self.char_strength = 10
+            self.char_constitution = 10
+            self.char_dexterity = 10
+            self.char_intelligence = 20
             self.state = STATE_CHAR_CREATE
 
     def create_character(self):
-        if len(self.input_char_name.strip()) >= 3:
-            name = self.input_char_name.strip()
-            gender = self.player_gender[0].upper()
-            self.network.send_packet(
-                f"{self.input_username}@createCharacter|python|none-{name}|"
-                f"{self.player_race}|{gender}|10|10|10|20"
-            )
+        ok, validation_key = self.validate_character_creation()
+        if not ok:
+            self.char_message = validation_key
+            return
+        self.network.send_packet(self.build_create_character_packet())
 
     def is_valid_position(self, x, y):
         padding = 0.15
@@ -354,20 +416,19 @@ class KisnardClient:
         
         if "-getCharacters" in header:
             if payload == "EMPTY":
-                self.slots = [None, None, None]
+                self.slots = [None] * MAX_CHARACTER_SLOTS
             else:
                 data = payload.split("|")
                 # Format: id | name | gender | level | race | gender_letter | costume | alignment | guild | title
-                self.slots = [None, None, None]
-                for i in range(len(data) // 10):
+                self.slots = [None] * MAX_CHARACTER_SLOTS
+                for i in range(min(MAX_CHARACTER_SLOTS, len(data) // 10)):
                     idx = i * 10
-                    if i < 3:
-                        self.slots[i] = {
-                            "name": data[idx+1],
-                            "gender": data[idx+2].lower(),
-                            "level": int(data[idx+3]),
-                            "race": data[idx+4].lower()
-                        }
+                    self.slots[i] = {
+                        "name": data[idx + 1],
+                        "gender": data[idx + 2].lower(),
+                        "level": int(data[idx + 3]),
+                        "race": data[idx + 4].lower(),
+                    }
             self.state = STATE_CHAR_SELECT
             
         elif "-serverMessages" in header:
@@ -382,9 +443,13 @@ class KisnardClient:
         elif "-authenticate" in header:
             print(f"Auth Response: {payload}")
             if payload.startswith("true"):
+                response_parts = payload.split("|", 1)
+                if len(response_parts) > 1:
+                    self.session_token = response_parts[1]
+                    self.network.session_token = self.session_token
                 self.network.status = "Connected"
                 self.network.status_error = False
-                self.network.send_packet(f"{self.input_username}@getCharacters|python")
+                self.network.send_packet(f"{self.input_username}@getCharacters|{self.session_token}")
             else:
                 self.network.status = "Authentication failed"
                 self.network.status_error = True

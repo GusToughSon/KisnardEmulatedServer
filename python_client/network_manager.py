@@ -19,11 +19,13 @@ class NetworkManager:
         self.listener_thread = None
         self.status = "Disconnected"
         self.status_error = False
+        self.session_token = ""
 
     def connect(self, username, password, version="1.3.4"):
         self.close()
         self.status = "Connecting..."
         self.status_error = False
+        self.session_token = ""
         print(f"Connecting to {self.host}:{self.port}...")
         try:
             # Create socket
@@ -120,6 +122,7 @@ class NetworkManager:
 
     def close(self, preserve_status=False):
         self.running = False
+        self.session_token = ""
         if self.ssl_socket:
             try:
                 self.ssl_socket.close()
