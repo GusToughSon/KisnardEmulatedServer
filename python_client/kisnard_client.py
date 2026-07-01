@@ -37,10 +37,12 @@ STATE_GAME = 3
 class KisnardClient:
     def __init__(self):
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-        pygame.display.set_caption("Kisnard Online - Python 1:1 Client")
+        pygame.display.set_caption("Kisnard Online")
         self.clock = pygame.time.Clock()
         
-        self.assets_dir = r"c:\Users\gooro\OneDrive\Desktop\KisnardFinds\game_assets\images"
+        client_dir = os.path.dirname(os.path.abspath(__file__))
+        self.project_dir = os.path.abspath(os.path.join(client_dir, "..", ".."))
+        self.assets_dir = os.path.join(self.project_dir, "game_assets", "images")
         
         # State Management
         self.state = STATE_LOGIN
@@ -127,8 +129,12 @@ class KisnardClient:
         self.running = True
 
     def load_gui_textures(self):
-        self.gui_header = pygame.image.load(os.path.join(self.assets_dir, "gui", "gui_header.png")).convert_alpha()
-        self.gui_header = pygame.transform.scale(self.gui_header, (500, 100))
+        header_path = os.path.join(self.assets_dir, "gui", "gui_header.png")
+        if os.path.exists(header_path):
+            self.gui_header = pygame.image.load(header_path).convert_alpha()
+            self.gui_header = pygame.transform.scale(self.gui_header, (500, 100))
+        else:
+            self.gui_header = pygame.Surface((500, 100), pygame.SRCALPHA)
         
         # Load Equipment Slot Overlays
         overlays = ["helm", "chest", "pants", "sword", "shield"]
@@ -242,7 +248,7 @@ class KisnardClient:
             if self.chat_active:
                 if event.key == pygame.K_RETURN:
                     if self.chat_input.strip():
-                        self.network.send_packet(f"{self.player_name}-generalChat@{self.chat_input.strip()}")
+                        self.network.send_packet(f"{self.player_name}@generalChat|{self.chat_input.strip()}")
                     self.chat_input = ""
                     self.chat_active = False
                 elif event.key == pygame.K_BACKSPACE:
@@ -312,7 +318,7 @@ class KisnardClient:
             self.player_gender = char["gender"]
             self.level = char["level"]
             self.load_avatar(self.player_race, self.player_gender)
-            self.network.send_packet(f"{self.input_username}-playCharacter@{self.player_name}")
+            self.network.send_packet(f"{self.input_username}@playCharacter|{self.player_name}")
         else:
             self.input_char_name = ""
             self.player_race = "human"
@@ -322,7 +328,11 @@ class KisnardClient:
     def create_character(self):
         if len(self.input_char_name.strip()) >= 3:
             name = self.input_char_name.strip()
-            self.network.send_packet(f"{self.input_username}-createCharacter@{name}|{self.player_race}|{self.player_gender[0].upper()}")
+            gender = self.player_gender[0].upper()
+            self.network.send_packet(
+                f"{self.input_username}@createCharacter|python|none-{name}|"
+                f"{self.player_race}|{gender}|10|10|10|20"
+            )
 
     def is_valid_position(self, x, y):
         padding = 0.15
@@ -372,7 +382,12 @@ class KisnardClient:
         elif "-authenticate" in header:
             print(f"Auth Response: {payload}")
             if payload.startswith("true"):
-                self.network.send_packet(f"{self.input_username}-getCharacters@")
+                self.network.status = "Connected"
+                self.network.status_error = False
+                self.network.send_packet(f"{self.input_username}@getCharacters|python")
+            else:
+                self.network.status = "Authentication failed"
+                self.network.status_error = True
 
     def update(self):
         import time
@@ -391,7 +406,7 @@ class KisnardClient:
             if now - self.last_heartbeat > 15:
                 self.last_heartbeat = now
                 if self.input_username:
-                    self.network.send_packet(f"{self.input_username}-ping@")
+                    self.network.send_packet(f"{self.input_username}@ping")
 
         if self.state == STATE_GAME:
             if self.chat_active:
@@ -435,12 +450,12 @@ class KisnardClient:
                 
                 if walk_cmd and self.current_walk != walk_cmd:
                     self.current_walk = walk_cmd
-                    self.network.send_packet(f"{self.player_name}-{walk_cmd}@{self.player_x}|{self.player_y}")
+                    self.network.send_packet(f"{self.player_name}@{walk_cmd}|{self.player_x}|{self.player_y}")
             else:
                 self.avatar_frame_idx = 0
                 if self.current_walk is not None:
                     self.current_walk = None
-                    self.network.send_packet(f"{self.player_name}-walkOff@{self.player_x}|{self.player_y}")
+                    self.network.send_packet(f"{self.player_name}@walkOff|{self.player_x}|{self.player_y}")
 
     def render(self):
         self.screen.fill(COLOR_BLACK)
@@ -476,6 +491,20 @@ class KisnardClient:
         
         pygame.draw.rect(self.screen, COLOR_WHITE, (432, 440, 160, 40), 2)
         self.screen.blit(font.render("LOGIN", True, COLOR_WHITE), (482, 450))
+
+        # Login-only connection status bar.
+        bar_height = 28
+        bar_y = SCREEN_HEIGHT - bar_height
+        pygame.draw.rect(self.screen, (18, 18, 18), (0, bar_y, SCREEN_WIDTH, bar_height))
+        pygame.draw.line(self.screen, COLOR_GREY, (0, bar_y), (SCREEN_WIDTH, bar_y))
+        status = self.network.status
+        status_color = COLOR_RED if self.network.status_error else (
+            COLOR_GREEN if status == "Connected" else COLOR_LIGHT_GREY
+        )
+        status_text = pygame.font.SysFont(None, 20).render(
+            f"Connection status: {status}", True, status_color
+        )
+        self.screen.blit(status_text, (12, bar_y + 6))
 
     def render_char_select_screen(self):
         font = pygame.font.SysFont(None, 32)
@@ -666,4 +695,9 @@ class KisnardClient:
 
 if __name__ == "__main__":
     client = KisnardClient()
-    client.run()
+    if "--smoke-test" in sys.argv:
+        print("Kisnard Python client startup check passed.")
+        client.network.close()
+        pygame.quit()
+    else:
+        client.run()

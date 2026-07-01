@@ -2,7 +2,11 @@ import os
 import pygame
 
 class MapRenderer:
-    def __init__(self, tiles_dir=r"c:\Users\gooro\OneDrive\Desktop\KisnardOnline\res\images\tiles", map_name="MyFirstMap"):
+    def __init__(self, tiles_dir=None, map_name="MyFirstMap"):
+        if tiles_dir is None:
+            client_dir = os.path.dirname(os.path.abspath(__file__))
+            workspace_dir = os.path.abspath(os.path.join(client_dir, "..", "..", ".."))
+            tiles_dir = os.path.join(workspace_dir, "res", "images", "tiles")
         self.tiles_dir = tiles_dir
         self.map_name = map_name
         self.tile_size = 32

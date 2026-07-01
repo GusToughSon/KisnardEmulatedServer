@@ -1,60 +1,64 @@
 [*] Loading map layer data (NPCs, mobs, objects, tradeskills)...
 [*] Loaded sprites - NPCs: 121, Mobs: 173, Objects: 179, Tradeskills: 85
-[*] Map entities loaded - NPCs: 457, Mobs: 1957, Objects: 2134, Tradeskills: 1244, Collision tiles: 974345
+[-] Warning: Map layer file not found: c:\Users\gooro\OneDrive\Desktop\KisnardFinds\game_assets\images\tiles\MyFirstMap-npcs-p.json
+[-] Warning: Map layer file not found: c:\Users\gooro\OneDrive\Desktop\KisnardFinds\game_assets\images\tiles\MyFirstMap-object-p.json
+[-] Warning: Map layer file not found: c:\Users\gooro\OneDrive\Desktop\KisnardFinds\game_assets\images\tiles\MyFirstMap-mobs-p.json
+[-] Warning: Map layer file not found: c:\Users\gooro\OneDrive\Desktop\KisnardFinds\game_assets\images\tiles\MyFirstMap-tradeskills-p.json
+[-] Warning: Map layer file not found: c:\Users\gooro\OneDrive\Desktop\KisnardFinds\game_assets\images\tiles\MyFirstMap-collision-p.json
+[*] Map entities loaded - NPCs: 0, Mobs: 0, Objects: 0, Tradeskills: 0, Collision tiles: 0
 [*] Server listening on 0.0.0.0:34215 (SSL)...
-[*] New connection from 127.0.0.1:63192
-[-] Connection Error with 127.0.0.1:63192: unpack requires a buffer of 4 bytes
-[*] New connection from 127.0.0.1:63197
-Traceback (most recent call last):
-  File "C:\Users\gooro\OneDrive\Desktop\KisnardFinds\KisnardEmulatedServer\kisnard_server.py", line 1341, in handle_client
-    obj_in = JavaObjectInputStream(client_socket)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\gooro\OneDrive\Desktop\KisnardFinds\KisnardEmulatedServer\java_serialization\java_serialization.py", line 29, in __init__
-    self._read_header()
-  File "C:\Users\gooro\OneDrive\Desktop\KisnardFinds\KisnardEmulatedServer\java_serialization\java_serialization.py", line 32, in _read_header
-    magic, version = struct.unpack('>HH', self.stream.read(4))
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-struct.error: unpack requires a buffer of 4 bytes
-
-[*] Connection with 127.0.0.1 closed.
-[-] Connection Error with 127.0.0.1:63197: unpack requires a buffer of 4 bytes
-Traceback (most recent call last):
-  File "C:\Users\gooro\OneDrive\Desktop\KisnardFinds\KisnardEmulatedServer\kisnard_server.py", line 1341, in handle_client
-    obj_in = JavaObjectInputStream(client_socket)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\gooro\OneDrive\Desktop\KisnardFinds\KisnardEmulatedServer\java_serialization\java_serialization.py", line 29, in __init__
-    self._read_header()
-  File "C:\Users\gooro\OneDrive\Desktop\KisnardFinds\KisnardEmulatedServer\java_serialization\java_serialization.py", line 32, in _read_header
-    magic, version = struct.unpack('>HH', self.stream.read(4))
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-struct.error: unpack requires a buffer of 4 bytes
-
-[*] Connection with 127.0.0.1 closed.
-[*] New connection from 127.0.0.1:63199
-[-] Connection Error with 127.0.0.1:63199: unpack requires a buffer of 4 bytes
-Traceback (most recent call last):
-  File "C:\Users\gooro\OneDrive\Desktop\KisnardFinds\KisnardEmulatedServer\kisnard_server.py", line 1341, in handle_client
-    obj_in = JavaObjectInputStream(client_socket)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\gooro\OneDrive\Desktop\KisnardFinds\KisnardEmulatedServer\java_serialization\java_serialization.py", line 29, in __init__
-    self._read_header()
-  File "C:\Users\gooro\OneDrive\Desktop\KisnardFinds\KisnardEmulatedServer\java_serialization\java_serialization.py", line 32, in _read_header
-    magic, version = struct.unpack('>HH', self.stream.read(4))
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-struct.error: unpack requires a buffer of 4 bytes
-
-[*] Connection with 127.0.0.1 closed.
-[*] New connection from 127.0.0.1:63201
-[-] Connection Error with 127.0.0.1:63201: unpack requires a buffer of 4 bytes
-Traceback (most recent call last):
-  File "C:\Users\gooro\OneDrive\Desktop\KisnardFinds\KisnardEmulatedServer\kisnard_server.py", line 1341, in handle_client
-    obj_in = JavaObjectInputStream(client_socket)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\gooro\OneDrive\Desktop\KisnardFinds\KisnardEmulatedServer\java_serialization\java_serialization.py", line 29, in __init__
-    self._read_header()
-  File "C:\Users\gooro\OneDrive\Desktop\KisnardFinds\KisnardEmulatedServer\java_serialization\java_serialization.py", line 32, in _read_header
-    magic, version = struct.unpack('>HH', self.stream.read(4))
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-struct.error: unpack requires a buffer of 4 bytes
-
+[*] New connection from 127.0.0.1:63930
+[*] SSL Handshake and Stream headers initialized with 127.0.0.1:63930
+[Client -> Server]: Received packet: test@authenticate|9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08|1.3.4 (Type: <class 'str'>)
+[*] Authenticating user: test
+[*] User 'test' authenticated successfully
+[Server -> Client]: Sending packet: test-authenticate@true|9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+[Server -> Client]: Sending packet: test-authenticate@true|9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+[Server -> Client]: Sent 90 bytes. Total sent: 106 bytes.
+[Client -> Server]: Received packet: test@getCharacters|python (Type: <class 'str'>)
+[*] Fetching characters for user: test
+[Server -> Client]: Sending packet: test-getCharacters@1|GusTough|Male|1|Human|M|no|0|None|N
+[Server -> Client]: Sending packet: test-getCharacters@1|GusTough|Male|1|Human|M|no|0|None|N
+[Server -> Client]: Sent 59 bytes. Total sent: 165 bytes.
+[Client -> Server]: Received packet: test@playCharacter|GusTough (Type: <class 'str'>)
+[*] Player 'test' entering game with character ID: GusTough
+[Server -> Client]: Sending packet: test-playCharacter@GusTough|true|1440,1080|1|61,93
+[Server -> Client]: Sent 53 bytes. Total sent: 218 bytes.
+[Server -> Client]: Sending packet: GusTough-firstLoad@61,93|false|Human|Male|no|N|0|100,100|100,100|0/100|0.0|0|79,107|79,107
+[Server -> Client]: Sent 93 bytes. Total sent: 311 bytes.
+[Server -> Client]: Sending packet: GusTough-buffsAppliedData@0
+[Server -> Client]: Sent 30 bytes. Total sent: 341 bytes.
+[*] Player 'GusTough' moved to (62, 93) via walkEast
+[*] Player 'GusTough' moved to (63, 93) via walkEast
+[*] Player 'GusTough' moved to (64, 93) via walkEast
+[*] Player 'GusTough' moved to (63, 93) via walkWest
+[*] Player 'GusTough' moved to (62, 93) via walkWest
+[*] Player 'GusTough' moved to (63, 93) via walkEast
+[*] Player 'GusTough' moved to (62, 93) via walkWest
+[*] Player 'GusTough' moved to (61, 93) via walkWest
+[*] Player 'GusTough' moved to (61, 92) via walkNorth
+[*] Player 'GusTough' moved to (62, 92) via walkEast
+[*] Player 'GusTough' moved to (61, 92) via walkWest
+[*] Player 'GusTough' moved to (60, 92) via walkWest
+[*] Player 'GusTough' moved to (59, 92) via walkWest
+[*] Player 'GusTough' moved to (58, 92) via walkWest
+[*] Player 'GusTough' moved to (57, 92) via walkWest
+[*] Player 'GusTough' moved to (56, 92) via walkWest
+[*] Player 'GusTough' moved to (55, 92) via walkWest
+[*] Player 'GusTough' moved to (54, 92) via walkWest
+[*] Player 'GusTough' moved to (53, 92) via walkWest
+[*] Player 'GusTough' moved to (52, 92) via walkWest
+[*] Player 'GusTough' moved to (51, 92) via walkWest
+[*] Player 'GusTough' moved to (50, 92) via walkWest
+[*] Player 'GusTough' moved to (49, 92) via walkWest
+[*] Player 'GusTough' moved to (48, 92) via walkWest
+[*] Player 'GusTough' moved to (47, 92) via walkWest
+[*] Player 'GusTough' moved to (46, 92) via walkWest
+[*] Player 'GusTough' moved to (45, 92) via walkWest
+[*] Player 'GusTough' moved to (44, 92) via walkWest
+[*] Player 'GusTough' moved to (43, 92) via walkWest
+[*] Player 'GusTough' moved to (43, 93) via walkSouth
+[*] Player 'GusTough' moved to (42, 93) via walkWest
+[*] Player 'GusTough' moved to (41, 93) via walkWest
+[*] Received EOF/None from client. Connection might be closing.
 [*] Connection with 127.0.0.1 closed.

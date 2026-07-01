@@ -3,6 +3,7 @@ import ssl
 import threading
 import queue
 import time
+import hashlib
 from java_serialization import JavaObjectInputStream, JavaObjectOutputStream
 
 class NetworkManager:
@@ -16,26 +17,37 @@ class NetworkManager:
         self.packet_queue = queue.Queue()
         self.running = False
         self.listener_thread = None
+        self.status = "Disconnected"
+        self.status_error = False
 
     def connect(self, username, password, version="1.3.4"):
+        self.close()
+        self.status = "Connecting..."
+        self.status_error = False
         print(f"Connecting to {self.host}:{self.port}...")
-        
-        # Create socket
-        self.raw_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.raw_socket.settimeout(10)
-        
-        # Configure SSL context to bypass cert verification (since server uses a custom truststore)
-        context = ssl.create_default_context()
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_NONE
-        
-        # Wrap socket
-        self.ssl_socket = context.wrap_socket(self.raw_socket, server_hostname=self.host)
-        self.ssl_socket.connect((self.host, self.port))
-        
-        # Remove the timeout so the listener thread can block indefinitely waiting for packets
-        self.raw_socket.settimeout(None)
-        print("SSL Handshake successful!")
+        try:
+            # Create socket
+            self.raw_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.raw_socket.settimeout(10)
+            
+            # Configure SSL context to bypass cert verification (since server uses a custom truststore)
+            context = ssl.create_default_context()
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+            
+            # Wrap socket
+            self.ssl_socket = context.wrap_socket(self.raw_socket, server_hostname=self.host)
+            self.ssl_socket.connect((self.host, self.port))
+            
+            # Remove the timeout so the listener thread can block indefinitely waiting for packets
+            self.ssl_socket.settimeout(None)
+            self.status = "Connected - authenticating..."
+            print("SSL Handshake successful!")
+        except Exception as exc:
+            self.status = f"Connection failed: {exc}"
+            self.status_error = True
+            self.close(preserve_status=True)
+            raise
         
         # Initialize output stream and send the header
         self.out_stream = JavaObjectOutputStream(write_header=True)
@@ -47,8 +59,9 @@ class NetworkManager:
         self.bytes_sent = len(header_bytes)
         
         # Send initial login string immediately
-        login_string = f"{username}@authenticate|{password}|{version}"
-        print(f"Sending login payload: {login_string}")
+        password_hash = hashlib.sha256(password.encode()).hexdigest()
+        login_string = f"{username}@authenticate|{password_hash}|{version}"
+        print(f"Sending authentication request for {username}")
         self.send_packet(login_string)
 
         self.running = True
@@ -101,14 +114,28 @@ class NetworkManager:
             print(f"Socket listener error: {e}")
         finally:
             self.running = False
+            if not self.status_error:
+                self.status = "Disconnected"
             print("Network listener thread stopped.")
 
-    def close(self):
+    def close(self, preserve_status=False):
         self.running = False
         if self.ssl_socket:
-            self.ssl_socket.close()
+            try:
+                self.ssl_socket.close()
+            except OSError:
+                pass
         if self.raw_socket:
-            self.raw_socket.close()
+            try:
+                self.raw_socket.close()
+            except OSError:
+                pass
+        self.ssl_socket = None
+        self.raw_socket = None
+        self.out_stream = None
+        if not preserve_status:
+            self.status = "Disconnected"
+            self.status_error = False
 
 
 class SocketFile:
