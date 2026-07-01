@@ -364,6 +364,22 @@ class KisnardClient:
                 self.char_gender = "male"
             elif 532 <= mx <= 612 and 380 <= my <= 410:
                 self.char_gender = "female"
+            elif 470 <= mx <= 496 and 428 <= my <= 454:
+                self.update_character_stats("char_strength", 1)
+            elif 500 <= mx <= 526 and 428 <= my <= 454:
+                self.update_character_stats("char_strength", -1)
+            elif 470 <= mx <= 496 and 468 <= my <= 494:
+                self.update_character_stats("char_constitution", 1)
+            elif 500 <= mx <= 526 and 468 <= my <= 494:
+                self.update_character_stats("char_constitution", -1)
+            elif 470 <= mx <= 496 and 508 <= my <= 534:
+                self.update_character_stats("char_dexterity", 1)
+            elif 500 <= mx <= 526 and 508 <= my <= 534:
+                self.update_character_stats("char_dexterity", -1)
+            elif 470 <= mx <= 496 and 548 <= my <= 574:
+                self.update_character_stats("char_intelligence", 1)
+            elif 500 <= mx <= 526 and 548 <= my <= 574:
+                self.update_character_stats("char_intelligence", -1)
             elif 432 <= mx <= 592 and 470 <= my <= 510:
                 self.create_character()
             elif 100 <= mx <= 200 and 600 <= my <= 640:
@@ -576,7 +592,7 @@ class KisnardClient:
         title = font.render("Select Character Slot", True, COLOR_WHITE)
         self.screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 120))
         
-        for i in range(3):
+        for i in range(MAX_CHARACTER_SLOTS):
             y_pos = 220 + i * 100
             pygame.draw.rect(self.screen, COLOR_WHITE, (262, y_pos, 500, 80), 1)
             pygame.draw.rect(self.screen, COLOR_DARK_GREY, (263, y_pos+1, 498, 78))
@@ -602,23 +618,50 @@ class KisnardClient:
         self.screen.blit(font.render(self.input_char_name, True, COLOR_WHITE), (372, 226))
         
         # Races
-        races = ["human", "dwarf", "orc"]
-        for idx, r in enumerate(races):
-            rx = 312 + idx * 140
-            bg = COLOR_GREEN if self.player_race == r else COLOR_DARK_GREY
-            pygame.draw.rect(self.screen, COLOR_WHITE, (rx, 300, 120, 30), 1)
-            pygame.draw.rect(self.screen, bg, (rx+1, 301, 118, 28))
-            self.screen.blit(font.render(r.capitalize(), True, COLOR_WHITE), (rx + 25, 306))
-            
+        race_labels = [("human", 292), ("orc", 402), ("brimlock", 512), ("tundrian", 622)]
+        for race, rx in race_labels:
+            bg = COLOR_GREEN if self.char_race == race else COLOR_DARK_GREY
+            pygame.draw.rect(self.screen, COLOR_WHITE, (rx, 300, 90, 30), 1)
+            pygame.draw.rect(self.screen, bg, (rx + 1, 301, 88, 28))
+            self.screen.blit(font.render(race.capitalize(), True, COLOR_WHITE), (rx + 8, 306))
+
         # Genders
-        genders = ["male", "female"]
-        for idx, g in enumerate(genders):
-            gx = 412 + idx * 120
-            bg = COLOR_GREEN if self.player_gender == g else COLOR_DARK_GREY
+        gender_labels = [("male", 412), ("female", 532)]
+        for gender, gx in gender_labels:
+            bg = COLOR_GREEN if self.char_gender == gender else COLOR_DARK_GREY
             pygame.draw.rect(self.screen, COLOR_WHITE, (gx, 380, 80, 30), 1)
             pygame.draw.rect(self.screen, bg, (gx+1, 381, 78, 28))
-            self.screen.blit(font.render(g.capitalize(), True, COLOR_WHITE), (gx + 15, 386))
-            
+            self.screen.blit(font.render(gender.capitalize(), True, COLOR_WHITE), (gx + 15, 386))
+
+        # Stat controls: Java client starts with four stats totaling 50.
+        stat_rows = [
+            ("Strength", "char_strength", 430),
+            ("Constitution", "char_constitution", 470),
+            ("Dexterity", "char_dexterity", 510),
+            ("Intelligence", "char_intelligence", 550),
+        ]
+        small = pygame.font.SysFont(None, 24)
+        for label, attr, y in stat_rows:
+            value = getattr(self, attr)
+            self.screen.blit(small.render(f"{label}:", True, COLOR_WHITE), (260, y))
+            pygame.draw.rect(self.screen, COLOR_WHITE, (430, y - 2, 30, 26), 1)
+            pygame.draw.rect(self.screen, COLOR_DARK_GREY, (431, y - 1, 28, 24))
+            self.screen.blit(small.render(str(value), True, COLOR_WHITE), (440, y + 1))
+            pygame.draw.rect(self.screen, COLOR_WHITE, (470, y - 2, 26, 26), 1)
+            self.screen.blit(small.render("+", True, COLOR_WHITE), (478, y + 1))
+            pygame.draw.rect(self.screen, COLOR_WHITE, (500, y - 2, 26, 26), 1)
+            self.screen.blit(small.render("-", True, COLOR_WHITE), (509, y + 1))
+
+        remaining = self.character_points_remaining()
+        remaining_color = COLOR_RED if remaining != 0 else COLOR_GREEN
+        self.screen.blit(font.render(f"Stat Points Left: {remaining}", True, remaining_color), (260, 605 - 120))
+
+        if self.char_message:
+            message = self.char_message
+            if message.startswith("character_creation_validation_"):
+                message = message.replace("character_creation_validation_", "").replace("_", " ")
+            self.screen.blit(small.render(message, True, COLOR_YELLOW), (260, 620))
+        
         pygame.draw.rect(self.screen, COLOR_WHITE, (432, 470, 160, 40), 1)
         self.screen.blit(font.render("CREATE", True, COLOR_WHITE), (477, 482))
         
